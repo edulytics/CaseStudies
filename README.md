@@ -1,2 +1,1 @@
-# tdi
-visualization
+# R code for case studies
