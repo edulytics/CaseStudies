@@ -1,0 +1,260 @@
+library(arules)
+library(arulesViz)
+library(readxl)
+#install.packages("grid")
+#install.packages("knitr")
+#install.packages("tidyverse")
+#install.packages("lubridate")
+#install.packages("plyr")
+
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(ggplot2)
+library(lubridate)
+library(arules)
+library(arulesViz)
+library(plyr)
+
+retail <- read.csv('onlineretail.csv',  stringsAsFactors=TRUE)
+#retail_trans = as(retail, "transactions")
+summary(retail)
+#summary(retail$InvoiceNo)
+#sd(retail$Quantity)
+#sd(retail$UnitPrice)
+
+getwd()
+summary(retail)
+retail <- retail[complete.cases(retail), ]
+
+retail$Quantity <- ifelse(retail$Quantity < 0, 0, retail$Quantity)
+retail$UnitPrice <- ifelse(retail$UnitPrice < 0, 0, retail$UnitPrice)
+nrow(retail)
+head(retail)
+summary(retail)
+#help(as.factor)
+retail %>% mutate(Description = as.factor(Description))
+retail %>% mutate(Country = as.factor(Country))
+
+retail$Date <- as.Date(retail$InvoiceDate,"%m/%d/%Y")
+retail$Time <- format(as.POSIXct(retail$InvoiceDate ,format = "%m/%d/%Y %H:%M"),"%H:%M:%S")
+
+#as.POSIXct(retail$InvoiceDate,format="%H:%M:%S")
+
+retail$InvoiceNo <- as.numeric(as.character(retail$InvoiceNo))
+glimpse(retail)
+
+hist(retail$Quantity,  col="blue", border="black",  xlab="Quantity", ylab="Frequency", main="Histogram of Quantity of items purchased")
+
+retail$Time <- as.factor(retail$Time)
+retail$Hour <- format(as.POSIXct(retail$InvoiceDate ,format = "%m/%d/%Y %H:%M"),"%H")
+retail$Hour <- as.numeric(retail$Hour)
+hist(retail$Hour,  col="blue", 
+     border="black", xlab="Time", ylab="No of purchases", main="Histogram of Time of purhase")
+#a %>%
+#  ggplot(aes(x=retail$Hour)) + 
+#  geom_histogram(stat="count",fill="indianred")
+
+#Items each customer buy
+
+detach("package:plyr", unload=TRUE)
+retail %>% 
+  group_by(InvoiceNo) %>% 
+  summarize(Number_of_Items = mean(Quantity)) %>%
+  ggplot(aes(x=Number_of_Items))+
+  geom_histogram(fill="blue", bins = 100000) + 
+ # geom_rug()+
+  coord_cartesian(xlim=c(0,100))
+
+#Top 10 best sellers
+attach(retail)
+tmp <- retail %>%
+  group_by(StockCode, Description) %>% 
+  summarize(count = n()) %>% 
+  arrange(desc(count))
+tmp <- tmp[1:10,]
+
+Item_Description = reorder(Description,count)
+tmp %>%
+ # summarize(Item_Description = reorder(Description,count)) %>%
+  
+  ggplot(aes(x=Item_Description, y=count))+
+  geom_bar(stat="identity",fill="blue")+
+  coord_flip()
+
+retail_sorted <- retail[order(retail$CustomerID),]
+library(plyr)
+itemList <- ddply(retail,c("CustomerID","Date"), 
+                  function(df1)paste(df1$Description, 
+                                     collapse = ","))
+head(itemList)
+itemList$CustomerID <- NULL
+itemList$Date <- NULL
+colnames(itemList) <- c("items")
+
+write.csv(itemList,"market_basket.csv", quote = FALSE, row.names = TRUE)
+#### data exploration above
+tr <- read.transactions('market_basket.csv', format = 'basket', sep=',')
+#tr
+summary(tr)
+
+itemFrequencyPlot(tr, topN=10, type='absolute')
+#itemFrequencyPlot(tr, parameter = list(supp=0.001, conf=0.8))
+
+par(mfrow=c(1,2))
+par(mar=c(4,1,4,1))
+itemFrequencyPlot(tr,
+                  type="relative",
+                  topN=10,
+                  horiz=TRUE,
+                  col='blue',
+                  xlab='',
+                  main='Item frequency, relative')
+#par(mfrow=c(1,2))
+#par(mar=c(4,1,4,1))
+itemFrequencyPlot(tr,
+                  type="absolute",
+                  topN=10, # can be changed to the number of interest
+                  horiz=TRUE,
+                  col='blue',
+                  xlab='',
+                  main='Item frequency, absolute')
+
+
+rules <- apriori(tr, parameter = list(supp=0.001, conf=0.8))
+rules <- sort(rules, by='confidence', decreasing = TRUE)
+summary(rules)
+
+inspect(rules[1:10])
+
+topRules <- rules[1:10]
+plot(topRules)
+###eclat
+itemsets <- eclat(tr, parameter = list(sup = 0.001))
+fsets <- eclat(tr, parameter = list(sup = 0.001))
+fsets.top5 <- sort(fsets[1:5])
+summary(fsets)
+summary(itemsets)
+###eclat end
+
+#Get the top 3 rules using the lift measure
+inspect(head(sort(rules, by="lift"),10))
+#topRules1 <- rules[1:89690]
+#Plot rules with support and lift shaded by confidence
+plot(rules, measure=c("support", "lift"), shading="confidence")
+
+plot(rules, method="graph")
+
+plot(rules, method = "grouped")
+
+#Plot rules by support and confidence shaded by order(number of items)
+plot(rules, shading="order", control=list(main = "Two-key plot"))
+
+
+#Get the top 10 rules sorted by lift
+#subrules <- head(sort(rules, by="lift"),10)
+
+#Plot rules using a grouped matrix
+plot(topRules,method="grouped")
+
+#Plot rules using an interactive grouped matrix
+plot(topRules,method="grouped", interactive=TRUE)
+
+#Plot subrules using a graph
+plot(topRules,method="graph")
+
+#Plot subrules using an interactive graph
+plot(topRules,method="graph", interactive=TRUE)
+
+#Plot subrules using a parallel coordinate plot
+plot(topRules,method="paracoord")
+#plot(rules,method="paracoord")
+
+
+#Get the top 3 rules using the lift measure
+#inspect(head(sort(rules, by="lift"),3))
+
+
+# fromclass
+#Plot rules with support and lift shaded by confidence
+plot(rules, measure=c("support", "lift"), shading="confidence")
+
+#Plot rules by support and confidence shaded by order(number of items)
+plot(rules, shading="order", control=list(main = "Two-key plot"))
+
+#Create an interactive scatter plot
+sel <- plot(rules, measure=c("support", "lift"), shading="confidence", interactive=TRUE)
+
+#Get the top 10 rules sorted by lift
+subrules <- head(sort(rules, by="lift"),10)
+
+#Plot rules using a grouped matrix
+plot(rules,method="grouped")
+
+#Plot rules using an interactive grouped matrix
+plot(rules,method="grouped", interactive=TRUE)
+
+#Plot subrules using a graph
+plot(subrules,method="graph")
+
+#Plot subrules using an interactive graph
+plot(subrules,method="graph", interactive=TRUE)
+
+#Plot subrules using a parallel coordinate plot
+plot(subrules,method="paracoord")
+
+
+
+####################################################################
+items <- itemFrequency(retail)
+
+rules <- apriori(retail, parameter=list(support=0.001, confidence=0.5))
+inspect(head(sort(rules, by="lift"),3))
+plot(rules)
+plot(rules, measure=c("support", "lift"), shading="confidence")
+subrules <- head(sort(rules, by="lift"),20)
+sel <- plot(subrules, measure=c("support", "lift"), shading="confidence", interactive=TRUE)
+
+
+#Get the top 20 most frequent items
+freq_Groceries <- head(sort(items, decreasing = TRUE),20)
+
+#Generate an item frequency plot of items with a support > 5%
+itemFrequencyPlot(Groceries,type="relative",support=0.05)
+
+#Generate rules using apriori algorithm
+rules <- apriori(Groceries, parameter=list(support=0.001, confidence=0.5))
+rules
+
+#Get the top 3 rules using the lift measure
+inspect(head(sort(rules, by="lift"),3))
+
+#Plot rules
+plot(rules)
+
+#Plot rules with support and lift shaded by confidence
+plot(rules, measure=c("support", "lift"), shading="confidence")
+
+#Plot rules by support and confidence shaded by order(number of items)
+plot(rules, shading="order", control=list(main = "Two-key plot"))
+
+#Create an interactive scatter plot
+sel <- plot(rules, measure=c("support", "lift"), shading="confidence", interactive=TRUE)
+
+#Get the top 10 rules sorted by lift
+subrules <- head(sort(rules, by="lift"),10)
+
+#Plot rules using a grouped matrix
+plot(rules,method="grouped")
+
+#Plot rules using an interactive grouped matrix
+plot(rules,method="grouped", interactive=TRUE)
+
+#Plot subrules using a graph
+plot(subrules,method="graph")
+
+#Plot subrules using an interactive graph
+plot(subrules,method="graph", interactive=TRUE)
+
+#Plot subrules using a parallel coordinate plot
+plot(subrules,method="paracoord")

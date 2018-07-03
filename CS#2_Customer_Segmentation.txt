@@ -1,0 +1,300 @@
+
+RawData <- read.csv('wcd.csv',header = TRUE)
+RawData <- read.csv('wcd1.csv',header = TRUE)
+RawData1 <- read.csv('wcd1.csv',header = TRUE)
+RawData <- RawData[,c(3:8)]
+#install.packages('bios2mds v1.0')
+head(RawData)
+summary(RawData)
+sd(RawData$Delicatessen)
+library(kohonen)
+library(RColorBrewer)
+library(cluster)
+library(fpc)
+library(factoextra)
+library('bios2mds v1.2.2')
+
+par(mfrow=c(2,2))
+for (i in c(3:8))
+  hist(RawData[,c(i)], col="red", border="black",breaks = 200,
+       main = colnames(RawData)[i], xlab="Annual Spending (m.u.)", 
+       ylab = "No. of Customers")
+
+# Basic Scatterplot Matrix
+Fresh <- RawData$Fresh
+Milk <- RawData$Milk
+Grocery <- RawData$Grocery
+Frozen <-  RawData$Frozen
+Detergents_Paper <- RawData$Detergents_Paper
+Delicatessen <- RawData$Delicassen
+pairs(~Fresh+Milk+Grocery+
+      Frozen+Detergents_Paper+Delicatessen,data=RawData, 
+      main="Simple Scatterplot Matrix")
+
+pairs(plotting_data_frame,diag.panel=panel.hist,
+      panel = function(x, y) {
+        points(x, y, cex = 0.5)
+        abline(lm(y ~ x), lty = "solid", col = "red")
+        lines(lowess(x, y))
+      }
+)
+
+#par(mfrow=c(2,3))
+#for (i in c(3:8))
+#  hist(RawData[,c(i)], col="blue",breaks = 200, main = colnames(RawData)[i], xlab="Normalized Annual Spending (m.u.)", ylab = "No. of Customers")
+
+par(mfrow=c(1,1))
+#single linkage example
+agn1 <- agnes(RawData, diss=FALSE, stand=FALSE, method="single") 
+dend_agn1 <- as.dendrogram(agn1)
+plot(dend_agn1, type = "rectangle", col = "red", xlab="Index of Wholesale Products", ylab = "Height", main = "Single-Linkage Clustering")
+
+#complete linkage example
+agn2 <- agnes(RawData, diss=FALSE, stand=FALSE, method="complete") 
+dend_agn2 <- as.dendrogram(agn2)
+plot(dend_agn2,type = "rectangle", col = "red", xlab="Index of Wholesale Products", ylab = "Height", main = "Complete-Linkage Clustering")
+
+#average linkage example
+agn3 <- agnes(RawData, diss=FALSE, stand=FALSE, method="average") 
+dend_agn3 <- as.dendrogram(agn3)
+plot(dend_agn3, xlab="Index of Wholesale Products",type = "rectangle", col = "red", ylab = "Height", main = "Average-Linkage Clustering")
+#rect.hclust(dend_agn3, k = 1, border = 2:4)
+
+#check cluster quality at different levels of the tree (k=2)
+par(mfrow=c(1,1))
+par(mar=c(5,1,5,1))
+k = 3
+distm <- dist(RawData)  
+agn_cut <- cutree(dend_agn1 ,k)
+sil <- silhouette(agn_cut,distm)
+summary(sil)
+plot(sil, col = c("red", "green", "blue", "black"))# with cluster-wise coloring
+plot(sil)
+
+#data(gpcr) 
+active <- gpcr$dif$sapiens.sapiens 
+mds <- mmds(active) 
+sil.score1 <- sil.score(mds$coord, nb.clus = c(2:10), nb.run = 100, iter.max = 100) 
+barplot(sil.score1)
+
+#kmeans
+#Elbow Method for finding the optimal number of clusters
+set.seed(144)
+#elbow method using SSE
+summary(RawData)
+par(mar=c(4,4,4,4))
+k.max <- 14 # Maximal number of clusters
+data <- RawData
+wss <- sapply(1:k.max, 
+              function(k){kmeans(data, k, nstart=10 )$tot.withinss})
+
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters",
+     ylab="Total within-clusters sum of squares")
+abline(v = 3, lty =2)
+
+# Compute the average silhouette width using Average Silloute
+# k = 2 to k = 15
+
+k.max <- 14
+sila <- rep(0, k.max)
+for(i in 2:k.max){
+  km.val <- kmeans(RawData, centers = i, nstart = 10)
+  ss <- silhouette(km.val$cluster, dist(RawData))
+  sila[i] <- mean(ss[, 3])
+}
+
+# Plot the  average silhouette width
+plot(1:k.max, sila, type = "b", pch = 19, 
+     frame = FALSE, xlab = "Number of clusters", ylab = 'Average Sillouette Width')
+abline(v = which.max(sila), lty = 2)
+
+###############################################################################
+#evaluating k-means in R
+###############################################################################
+#calculate hopkins statistic
+# Compute Hopkins statistic 
+summary(RawData)
+res <- get_clust_tendency(RawData, n = nrow(RawData)-1, graph = FALSE)
+res$hopkins_stat
+
+#run k-means with k = 3
+#RawData <- RawData[,c(3:8)]
+km3 <- kmeans(RawData, centers = 3) 
+km3
+km3$cluster
+newdata <- cbind(RawData1,km3$cluster)
+head(newdata)
+head(RawData)
+#visualize results colored by cluster
+plot(RawData, col=km3$cluster)
+#plot cluster centers
+points(km3$centers,pch='x',cex=1.5)
+#clusplot(RawData,km4$cluster, color=TRUE, shade=TRUE, labels = 2, lines = 0)
+#plot clusters
+fviz_cluster(km3, data = RawData )
+#create distance matrix for cluster.stats
+distm <- dist(RawData)  
+#calculate cluster statistics for km2
+cstatskm3 <- cluster.stats(distm,km3$cluster)
+#evaluate between and within cluster distances
+cstatskm3$average.between
+cstatskm3$average.within
+
+# Silhouette plot
+sil <- silhouette(km3$cluster,distm)
+summary(sil)
+par(mar=c(4,4,4,4))
+#par(mar=c(5,12,5,12))
+plot(sil, col = c("red", "green", "blue"))
+# with cluster-wise coloring
+plot(sil)
+###############################################
+#k-medoids#PAM
+
+distm <- dist(RawData) 
+#run PAM with k = 4
+pam4 <- pam(RawData, 3)
+
+#visualize results colored by cluster
+plot(RawData, col=pam4$cluster)
+
+#plot cluster centers
+points(pam4$medoids,pch='O',cex=1.5)
+
+#evaluate PAM
+cstatspam4 <- cluster.stats(distm,pam4$cluster)
+
+newdatapam <- cbind(RawData1,pam4$cluster)
+head(newdatapam)
+
+write.csv(newdatapam,"kmedoiddata1.csv")
+
+#evaluate between and within cluster distances
+cstatspam4$average.between
+cstatspam4$average.within
+
+# Silhouette plot
+sil <- silhouette(pam4$cluster,distm)
+plot(sil)
+summary(sil)
+#pr4 <- pam(NormalizedData,4)
+str(si <- silhouette(pam4))
+(ssi <- summary(si))
+plot(si) # silhouette plot
+plot(si, col = c("red", "green", "blue"))# with cluster-wise coloring
+
+#SOM example
+#create SOM grid
+sommap <- som(scale(RawData), grid = somgrid(2, 2))
+#sommap <- som(scale(RawData), grid = somgrid(2, 2))
+
+groups<-3
+plot(sommap)
+#plot the make-up of each cluster
+plot(sommap,type = c("codes"),palette.name = rainbow, main = "Cluster Content")
+#plot the count in each cluster
+plot(sommap, type = c("counts"), main = "Cluster Counts")
+#som.hc <- cutree(hclust(dist(sommap$codes)), groups) #palette.name = greys,
+#plot
+plot(sommap, type="codes", bgcol=rainbow(groups)[som.hc])
+
+#par(mfrow = c(1, 2))
+plot(sommap, type = "codes", main = 'Clusters by codes')
+plot(sommap, type = "mapping", main = 'Clusters by mapping')
+sommap1<- as.numeric(unlist(sommap$codes))
+hc11 <- cutree(hclust(dist(sommap1)), 4)
+add.cluster.boundaries(sommap, hc11)
+
+#validation
+#Kohonen Network Example(BB) #install.packages("kohonen")
+library(kohonen)
+som.sale <- som(as.matrix(RawData),
+                grid=somgrid(2,2),
+                rlen=200,
+                alpha=c(0.03,0.00),
+                radius=1)
+plot(som.sale)
+som.sale
+
+d = dist(RawData)
+silko <- silhouette(som.sale$unit.classif,d)
+plot(silko)
+par(mar=c(5,7,5,7))
+(ssi <- summary(silko))
+summary(silko)
+plot(silko, col = c("red", "green", "blue", "yellow"))
+
+newdataf <- cbind(RawData1,som.sale$unit.classif)
+head(newdataf)
+head(newdata)
+write.csv(newdata,"kmeansdata.csv")
+write.csv(newdataf,"kohonendata.csv")
+
+# single, complete, average
+require(fastcluster)
+require(graphics)
+library(dendextend)
+library(gplots)
+d_raw <- dist(RawData)
+
+hc_dis_complete <- hclust(d_raw, method = "complete")
+hc_dis_single <- hclust(d_raw, method = "single")
+hc_dis_average <- hclust(d_raw, method = "average")
+
+par(mfrow=c(1,4))
+plot(hc_dis_single)
+plot(hc_dis_average)
+plot(hc_dis_complete)
+plot(hc_dis_centroid)
+
+par(mfrow=c(1,2))
+plot(hc_dis_complete)
+plot(hc_dis_average)
+
+par(mfrow=c(1,2))
+plot(hc_dis_single)
+plot(hc_dis_centroid)
+
+#complete average
+wsc_dendlist <- dendlist()
+wsc_dendlist <- dendlist(wsc_dendlist, as.dendrogram(hc_dis_complete))
+wsc_dendlist <- dendlist(wsc_dendlist, as.dendrogram(hc_dis_average))
+names(wsc_dendlist) <- c("complete-linkage", "average-linkage")
+par(mfrow=c(1,1))
+wsc_dendlist %>% dendlist(which = c(1,2)) %>% ladderize %>% 
+  set("rank_branches") %>%
+  tanglegram(common_subtrees_color_branches = TRUE)
+
+#single complete
+wsc_dendlist <- dendlist()
+wsc_dendlist <- dendlist(wsc_dendlist, as.dendrogram(hc_dis_single))
+wsc_dendlist <- dendlist(wsc_dendlist, as.dendrogram(hc_dis_complete))
+names(wsc_dendlist) <- c("single-linkage", "complete-linkage")
+par(mfrow=c(1,1))
+wsc_dendlist %>% dendlist(which = c(1,2)) %>% ladderize %>% 
+  set("rank_branches") %>%
+  tanglegram(common_subtrees_color_branches = TRUE)
+
+dend <- as.dendrogram(hc_dis_complete)
+dend <- rotate(dend, 1:435)
+dend <- color_branches(dend, k=3)
+dend <- hang.dendrogram(dend,hang_height=0.1)
+dend <- set(dend, "labels_cex", 0.5)
+
+par(mfrow=c(1,1))
+col_func <- function(n) rev(colorspace::heat_hcl(n, c = c(80, 30), l = c(30, 90), power = c(1/5, 1.5)))
+gplots::heatmap.2(as.matrix(RawData1[,c(1:8)]), 
+                  main = "Heatmap for Discretized Data Set",
+                  srtCol = 20,
+                  dendrogram = "row",
+                  Rowv = dend,
+                  Colv = "NA", 
+                  trace="none",          
+                  margins =c(5.5,0.5),      
+                  key.xlab = "Cm",
+                  denscol = "grey",
+                  density.info = "density",
+                  col = col_func
+)
